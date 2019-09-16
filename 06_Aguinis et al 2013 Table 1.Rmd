@@ -1,0 +1,403 @@
+---
+always_allow_html: yes
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r message=FALSE, warning=FALSE, echo=FALSE, results='hide'}
+################################################################################
+#                                   June 13, 2018                              #
+#    The following function creates a well designed HLM table for publishing   #
+#    It is written for a single level 1 predictor & a single level 2 predictor #
+#    It is based on the following code: http://www.hermanaguinis.com/JOMR.html #
+#                                                                              #
+#    The code was written by Avi Kluger (https://www.avi-kluger.com/) and      #
+#    students in his Spring 2018 HLM class including:                          #
+#       Sarit Pery,                                                            #
+#       Noam Markovitch,                                                       #
+#       Alon Zoizner,                                                          #
+#       Lior Abramson,                                                         #
+#       Limor Borut, &                                                         #
+#       Benjamin A Katz                                                        #
+#    The function is general.  To demonstrate the general use of the code, this#
+#    Rmarkdown produces one Table replicating Aguinis et al., (2013), and one  #
+#    table using the  1982 study "High School and Beyond".  The code reads the #
+#    first dataset from Dropbox and the second from the package mlmRev         #
+#    Users can change input after the end of the HLM_Table_Creation below      #
+#    For best results knit to Word, change Word to landscape and arrange the   #
+#    width of the columns in Word.                                             #
+################################################################################
+
+HLM_Table_Creation <- function(x,          #x is the expected name of the df
+                               DV = "Y", 
+                               l1v = "Xc", 
+                               l2v = "Wjc", 
+                               l2id = "l2id", 
+                               DV_Label = "Y", 
+                               l1v_Label = "LMX", 
+                               l2v_Label = "Leadership climate", 
+                               full_headers = TRUE) {
+# x =           data, the structure should be data frame with columns of 
+#               at least DV, l1v, l2v, l2id
+# DV =          The dependent variable, the outcome. This is a level 1 parameter.
+# l1v =         The level 1 predictor
+# l2v =         The level 2 predictor
+# l2id =        The nesting label (e.g: school from file HSB82)
+# Labels =      The variables` labels
+# full_headers= set to FALSE if you need columns to be thiner
+
+    # The following 3 rows are for debug purposes only:
+    # DV = "Y"; l1v = "Xc"; l2v = "Wjc" ; l2id = "l2id"
+    # DV_Label = "Y"; l1v_Label = "LMX"; l2v_Label = "Leadership climate"
+    # full_headers = TRUE
+  
+    # Import packages
+    if (!require("lme4")) install.packages("lme4"); library(lme4)
+    if (!require("weights")) install.packages("weights"); library(weights)   
+    
+    df <- data.frame(matrix(nrow = 17, ncol = 4), stringsAsFactors=FALSE)  
+
+    colnames(df) <- c("Null", "RandIntFixSlp", "RandIntRandSlp", "Interaction")    
+
+    #Row names with greek and subscript codes for Rmarkdown 
+    # These are the final labels we would like to see in the table display.
+    # CHANGES TO THE LABELS:
+    # If you want to change the rows order: you just change it here, and it'll change.
+    # If you want to change the label, please note you have to change it here
+    # and everywhere the row appears in the results calculation in steps 1-4.
+    rownames(df)    <- c("Level 1", 
+                         paste0("Intercept (", "$\\gamma_{00}$", ")"),
+                         paste0(l1v_Label, " (", "$\\gamma_{10}$", ")"),
+                         "Level 2",
+                         paste0(l2v_Label, " (", "$\\gamma_{01}$", ")"),
+                         "Cross-level interaction",
+                         paste0(l1v_Label, " ", l2v_Label ," (","$\\gamma_{11}$", ")"),
+                         "Variance components",
+                         paste0("Within-team (L1) variance (","$\\sigma$","^2^)"),
+                         paste0("Intercept (L2) variance (","$\\tau_{00}$", ")"),
+                         paste0("Slope (L2) variance (", "$\\tau_{11}$", ")"),
+                         paste0("Intercept-slope (L2) covariance (",
+                                "$\\tau_{01}$", ")"),
+                         "Additional information",
+                         "ICC",
+                         "-2 log likelihood (FIML)",
+                         "Number of estimated parameters",
+                         "Pseudo R2")
+
+    # STEP 1: Null Model
+    # ===================
+    fit1 <- lmer(as.formula(paste0(DV, " ~ (1 |", l2id, ")")),data=x,  REML=FALSE)
+    summary(fit1)
+    
+    # fixed-effect parameter estimates
+    FE           <- round(summary(fit1)$coefficients , 2)
+    parameters   <- FE[, "Estimate"]
+    
+    # fixed-effect parameter standard errors
+    parametersSE <- FE[, "Std. Error"]
+    
+    # Fixed-effect parameter t test
+    t05 <- abs(qt(.975, df= 30)) #Conservative approach to df 
+    t01 <- abs(qt(.005, df= 30))
+    parameters.t <-ifelse(FE[, "t value"] > t05, "*", "")
+    parameters.t <-ifelse(FE[, "t value"] > t01, "**", parameters.t)
+    
+    parameters   <-paste0(parameters, parameters.t, " (", parametersSE, ")")
+    
+    df[rownames(df) == "Intercept ($\\gamma_{00}$)","Null"] <- parameters
+    
+    # Compute ICC 
+    # Variances
+    V       <- round(as.data.frame(VarCorr(fit1)) ["vcov"], 3)
+    ICC     <- V[1, 1] / sum(V) 
+    ICC
+    
+    df[rownames(df) == "ICC", "Null"]   <- rd(ICC, 3)
+    df[rownames(df) == "Within-team (L1) variance ($\\sigma$^2^)", 
+       "Null"]   <- V [2, ]
+    df[rownames(df) == "Intercept (L2) variance ($\\tau_{00}$)", 
+       "Null"]          <- V [1, ]
+    df[rownames(df) == "-2 log likelihood (FIML)", "Null"] <-
+        round(as.data.frame(logLik(fit1))*-2, 0)
+    df[rownames(df) == "Number of estimated parameters", "Null"] <-
+        attr(logLik(fit1), "df") 
+    df[rownames(df) == "Pseudo R2", "Null"] <- 0
+    
+    # Test appearance of column 1
+    df["Null"]
+    
+    #STEP 2: Random Intercept and Fixed Slope Model
+    #==============================================
+    fit2 <- lmer(as.formula(paste0(DV, " ~ (1 |", l2id, ")+ ", 
+                                   l1v, " + ", 
+                                   "I ( ", l2v, " - mean(", l2v,"))")),
+                 data=x,REML=F)
+     summary(fit2)
+    
+    # Computing pseudo R-squared
+    yhat2=model.matrix(fit2)%*%fixef(fit2)
+    PR2 = cor(yhat2,x[[DV]])^2
+    
+    # fixed-effect parameter estimates
+    FE1           <- round(summary(fit2)$coefficients , 2)
+    parameters1   <- FE1[, "Estimate"]
+    
+    # fixed-effect parameter standard errors
+    parametersSE1 <- FE1[, "Std. Error"]
+    
+    # Fixed-effect parameter t test
+    t05 <- abs(qt(.975, df= 30)) #Conservative approach to df, to identify critical t if p < .05
+    t01 <- abs(qt(.005, df= 30)) #This is to calculate critical t for p < .01
+    parameters.t <-ifelse(FE[, "t value"] > t05, "*", "")
+    parameters.t <-ifelse(FE[, "t value"] > t01, "**", parameters.t)
+    
+    parameters1   <-paste0(parameters1, parameters.t, " (", parametersSE1, ")")
+    
+    
+    df[rownames(df) == "Intercept ($\\gamma_{00}$)", 
+       "RandIntFixSlp"] <- parameters1[1]
+    df[rownames(df) == paste0(l2v_Label, " ($\\gamma_{01}$)"), 
+       "RandIntFixSlp"] <- parameters1[3]
+    df[rownames(df) == paste0(l1v_Label," ($\\gamma_{10}$)"), 
+       "RandIntFixSlp"] <- parameters1[2]
+    
+    # Log likelihood difference test
+    FISig1 = anova(fit1,fit2)
+    parameters.FIML1 <- ifelse(FISig1[2,8] < .05, "*", "")
+    parameters.FIML1 <- ifelse(FISig1[2,8] < .01, "**", parameters.FIML1)
+    
+    
+    # Variances
+    V1       <- round(as.data.frame(VarCorr(fit2)) ["vcov"], 3)
+    
+    df[rownames(df) == "Within-team (L1) variance ($\\sigma$^2^)", 
+       "RandIntFixSlp"]   <- V1 [2, ]
+    df[rownames(df) == "Intercept (L2) variance ($\\tau_{00}$)", 
+       "RandIntFixSlp"]          <- V1 [1, ]
+    df[rownames(df) == "-2 log likelihood (FIML)", 
+       "RandIntFixSlp"] <-
+        paste0(round(as.data.frame(logLik(fit2))*-2, 0),parameters.FIML1)
+    df[rownames(df) == "Number of estimated parameters", 
+       "RandIntFixSlp"] <-
+        attr(logLik(fit2), "df") 
+    df[rownames(df) == "Pseudo R2", "RandIntFixSlp"] <- rd(PR2,2)
+    
+    
+    # Test appearance of column 2
+    df["RandIntFixSlp"]
+    
+    
+    #STEP 3: Random Intercept and Random Slope model
+    #================================================
+    fit3 <- lmer(as.formula( 
+        paste0(DV, " ~ ", l1v, 
+               " + ( ", l1v, " | ", l2id, " )",
+               " + I(", l2v, "-mean(", l2v,") )")), data = x, REML = FALSE)
+    summary(fit3)
+    
+    # fixed-effect parameter estimates
+    FE_step3           <- round(summary(fit3)$coefficients , 2)
+    parameters_step3   <- FE_step3[, "Estimate"]
+    
+    # fixed-effect parameter standard errors
+    parametersSE_step3 <- FE_step3[, "Std. Error"]
+    
+    # Fixed-effect parameter t test
+    t05 <- abs(qt(.975, df= 30)) #Conservative approach to df 
+    t01 <- abs(qt(.005, df= 30))
+    parameters.t_step3 <-ifelse(FE_step3[, "t value"] > t05, "*", "")
+    parameters.t_step3 <-ifelse(FE_step3[, "t value"] > t01, "**", parameters.t)
+    
+    parameters_step3   <-paste0(parameters_step3, parameters.t_step3, 
+                                " (", parametersSE_step3, ")")
+    
+    df[rownames(df) == "Intercept ($\\gamma_{00}$)", 
+       "RandIntRandSlp"] <- parameters_step3[1]
+    df[rownames(df) == paste0(l1v_Label," ($\\gamma_{10}$)"), 
+       "RandIntRandSlp"] <- parameters_step3[2]
+    df[rownames(df) == paste0(l2v_Label, " ($\\gamma_{01}$)"), 
+       "RandIntRandSlp"] <- parameters_step3[3]
+    
+    # Compute ICC 
+    # Variances
+    V_step3       <- round(as.data.frame(VarCorr(fit3)) ["vcov"], 3)
+    ICC_step3     <- V_step3[1, 1] / sum(V_step3) 
+    ICC_step3
+    
+    #df[rownames(df) == "ICC", "RandIntRandSlp"]   <- rd(ICC_step3, 3)
+    df[rownames(df) == "Within-team (L1) variance ($\\sigma$^2^)", 
+       "RandIntRandSlp"]   <- V_step3 [4, ]
+    df[rownames(df) == "Intercept (L2) variance ($\\tau_{00}$)", 
+       "RandIntRandSlp"]          <- V_step3 [1, ]
+    df[rownames(df) == "Slope (L2) variance ($\\tau_{11}$)", 
+       "RandIntRandSlp"]          <- V_step3 [2, ]
+    df[rownames(df) == "Intercept-slope (L2) covariance ($\\tau_{01}$)", 
+       "RandIntRandSlp"]          <- V_step3 [3, ]
+    
+    
+    df[rownames(df) == "Number of estimated parameters", "RandIntRandSlp"] <-
+        attr(logLik(fit3), "df") 
+    
+    # Computing pseudo R-squared
+    yhat3=model.matrix(fit3)%*%fixef(fit3)
+    pseudoR2_step3 = round(cor(yhat3,x[[DV]])^2,2); pseudoR2_step3
+    
+    df[rownames(df) == "Pseudo R2", "RandIntRandSlp"] <- rd(pseudoR2_step3)
+    
+    # Crainceanu & Ruppert (2004) Test of Slope Variance Component
+    compare_models = anova(fit2,fit3)
+    pv_loglik_step3 = compare_models$`Pr(>Chisq)`[2]
+    significance_level_step3 = ifelse(pv_loglik_step3 < .05, "*", "")
+    significance_level_step3 = ifelse(pv_loglik_step3 < .01, "**", significance_level_step3)
+    logLikelihood_step3 = round(as.data.frame(logLik(fit3))*-2, 0)
+    logLik_withSig_step3 = paste0(logLikelihood_step3, significance_level_step3)
+    
+    df[rownames(df) == "-2 log likelihood (FIML)", "RandIntRandSlp"] <-
+        logLik_withSig_step3
+    
+    # Test appearance of column 1
+    df["RandIntRandSlp"]
+    
+    #STEP 4: Cross-Level Interaction Model
+    #=====================================
+    fit4 <- lmer(as.formula(
+        paste0(DV, "~ ( ", l1v, "|", l2id, " )",
+               "+ ", l1v, " * I(", l2v, "-mean(", l2v,") )")), 
+        data = x, REML = FALSE)
+    summary(fit4)
+
+    #fixed-effect parameter estimates
+    FE           <- round(summary(fit4)$coefficients , 2)
+    parameters   <- FE[, "Estimate"]
+    
+    # fixed-effect parameter standard errors
+    parametersSE <- FE[, "Std. Error"]
+    
+    # Fixed-effect parameter t test
+    t05 <- abs(qt(.975, df= 30)) #Conservative approach to df 
+    t01 <- abs(qt(.005, df= 30))
+    parameters.t <-ifelse(FE[, "t value"] > t05, "*", "")
+    parameters.t <-ifelse(FE[, "t value"] > t01, "**", parameters.t)
+    
+    parameters   <-paste0(parameters, parameters.t, " (", parametersSE, ")")
+ 
+    row <-rownames(df)
+    fixed.result.rows <- 
+        c(which(row=="Intercept ($\\gamma_{00}$)"), 
+          which(row==paste0(l1v_Label, " (", "$\\gamma_{10}$", ")")),
+          which(row==paste0(l2v_Label, " (", "$\\gamma_{01}$", ")")), 
+          which(row==paste0(l1v_Label, " ", l2v_Label ," (","$\\gamma_{11}$", ")"))) 
+    
+    df[fixed.result.rows,which(colnames(df)=="Interaction")] <- parameters
+    
+    ### variance components
+    VarComp<-as.data.frame(VarCorr(fit4))
+    Variances<-round(VarComp[,"vcov"],3)
+    
+    random <- c(which(row=="Intercept (L2) variance ($\\tau_{00}$)"), 
+                which(row=="Slope (L2) variance ($\\tau_{11}$)"),
+                which(row=="Intercept-slope (L2) covariance ($\\tau_{01}$)"),
+                which(row=="Within-team (L1) variance ($\\sigma$^2^)"))
+    df[random, which(colnames(df)=="Interaction")] <- Variances
+    
+    ###-2LogLik
+    
+    fit4m2logLik<-round(as.data.frame(logLik(fit4))*-2, 0)
+    fit3m2logLik<-round(as.data.frame(logLik(fit3))*-2, 0)
+    
+    sigtest <- anova(fit4, fit3)
+    m2logLik.Chi <-ifelse(sigtest$`Pr(>Chisq)` < .01,"**",
+                          ifelse(sigtest$`Pr(>Chisq)`<.05,"*",""))
+    
+    df[rownames(df) == "-2 log likelihood (FIML)", "Interaction"] <-
+        paste0(fit4m2logLik,m2logLik.Chi[2])
+    
+    ###Number of estimated parameters
+    
+    df[rownames(df) == "Number of estimated parameters", "Interaction"] <-
+        attr(logLik(fit4), "df") 
+    
+    ### Computing pseudo R-squared
+    yhat2=model.matrix(fit4)%*%fixef(fit4)
+    PseudoR2<-rd(cor(yhat2,x[[DV]])^2, 2)
+    df[rownames(df) == "Pseudo R2", "Interaction"] <- PseudoR2
+    
+    
+    
+    # set the labels for the data frame: 
+    
+    ifelse (full_headers,    
+            colnames(df)    <- c("`Null (Step 1)`",
+                                 "`Random Intercept and Fixed Slope (Step 2)`",
+                                 "`Random Intercept and Random Slope (Step 3)`",
+                                 "`Cross-Level Interaction (Step 4)`"),
+            
+            colnames(df)    <- c("`Null (Step 1)`",
+                                 "`RIFS (Step 2)`",
+                                 "`RIRS (Step 3)`",
+                                 "`Interaction (Step 4)`"))
+    return(df)
+    
+}
+
+x <- read.csv("https://www.dropbox.com/s/scpzstk4j95giyt/Aguini.csv?dl=1")
+df <- HLM_Table_Creation(x)
+
+if (!require("mlmRev")) install.packages("mlmRev")
+library(mlmRev)
+
+x <- Hsb82 
+
+#load("HLMbook.Rdata")
+df.schools <- HLM_Table_Creation(x, DV = "mAch", l1v = "cses", l2v = "meanses", l2id = "school", 
+                   DV_Label = "Math Score", l1v_Label = "CSES", l2v_Label = "MeanSES",
+                   full_headers = TRUE)
+
+#FFU: We should change the row names to some logic names, and 
+#set the labels in the end of the process, as been done for the columns.
+
+# rownames(df)    <- c("Level 1 Header", 
+#                      "Intercept",
+#                      "level1 slope",
+#                      "Level 2 Header",
+#                      "level2 slope",
+#                      "Interaction Header",
+#                      "Interaction Slope",
+#                      "Variance components Header",
+#                      "sigma2",
+#                      "Intercept l2",
+#                      "slope l2 var",
+#                      
+#                      paste0("Intercept (L2) variance (","$\\tau_{00}$", ")"),
+#                      paste0("Slope (L2) variance (", "$\\tau_{11}$", ")"),
+#                      paste0("Intercept-slope (L2) covariance (",
+#                             "$\\tau_{01}$", ")"),
+#                      "Additional information",
+#                      "ICC",
+#                      "-2 log likelihood (FIML)",
+#                      "Number of estimated parameters",
+#                      "Pseudo R2")
+# 
+```
+
+<center>Table 1
+
+Results of Multilevel Modeling Analysis With Illustrative Data</center>
+
+```{r, message=FALSE, echo=FALSE, warning=FALSE}
+if (!require("pander")) install.packages("pander");library(pander)
+set.alignment('center', row.names = 'left')
+panderOptions('missing', '')
+
+pander::pander(df,split.table = Inf, emphasize.rownames = FALSE) 
+```
+
+<center>Table 1
+
+Results of Multilevel Modeling Analysis With Data from the 1982 study "High School and Beyond" as used in Raudenbush & Bryk (2002)</center>
+```{r, message=FALSE, echo=FALSE, warning=FALSE}
+pander::pander(df.schools,split.table = Inf, emphasize.rownames = FALSE) 
+```
+

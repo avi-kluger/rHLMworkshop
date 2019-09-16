@@ -1,0 +1,32 @@
+---
+title: "HLM"
+author: "Avi Kluger"
+date: "9/9/2019"
+---
+# {.tabset}
+## The full model {.tabset}
+
+<font size="5"> 1. Level 1</font> 
+
+<center> <h1> Y~ij~ = $\beta$~0j~ +  $\beta$~1j~X~ij~ + e~ij~</h1> </center>
+
+<font size="5"> 2. Level 2 intercept</font> 
+
+<center> <h1> $\beta$~0j~ = $\gamma$~00~ +  $\gamma$~01~W~j~ + U~0j~</h1> </center>
+
+<font size="5"> 3. Level 2 slope</font> 
+
+<center> <h1> $\beta$~1j~ =  $\gamma$~10~ +  $\gamma$~11~W~j~ + U~1j~</h1> </center>
+
+<font size="5">4. Combined model</font> 
+ 
+<center> <h1> Y~ij~ =  $\gamma$~00~ + $\gamma$~10~X~ij~ + $\gamma$~01~W~j~ +  $\gamma$~11~W~j~X~ij~ + U~1j~X~ij~ + U~0j~ + e~ij~</h1> </center>
+
+
+## The null model {.tabset}
+
+<font size="5"> 1. Level 1</font> 
+<center> <h1> Y~ij~ = $\beta$~0j~ +   e~ij~</h1> </center>
+
+<font size="5"> 2. Level 2 intercept</font> 
+<center> <h1> $\beta$~0j~ = $\gamma$~00~ +  U~0j~</h1> </center>
